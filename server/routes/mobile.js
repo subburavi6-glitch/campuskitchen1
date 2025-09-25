@@ -59,20 +59,26 @@ const generateOTP = () => {
 // Send OTP
 router.post('/send-otp', async (req, res) => {
   try {
-    const { registerNumber } = req.body;
+    const { identifier } = req.body; // Can be register number or mobile number
 
-    if (!registerNumber) {
-      return res.status(400).json({ error: 'Register number is required' });
+    if (!identifier) {
+      return res.status(400).json({ error: 'Register number or mobile number is required' });
     }
 
-    // Check if student exists
+    // Check if student exists by register number or mobile number
     const student = await req.prisma.student.findUnique({
-      where: { registerNumber }
+      where: {
+        OR: [
+          { registerNumber: identifier },
+          { mobileNumber: identifier }
+        ],
+        mobileLoginEnabled: true
+      }
     });
 
     // Only send OTP if student exists
     if (!student) {
-      return res.status(404).json({ error: 'Student not found. Please contact administration.' });
+      return res.status(404).json({ error: 'Student not found or mobile login disabled. Please contact administration.' });
     }
 
     // Check if student has a phone number
@@ -83,7 +89,7 @@ router.post('/send-otp', async (req, res) => {
     const otp = generateOTP();
     
     // Store OTP with expiration (5 minutes)
-    otpStore.set(registerNumber, {
+    otpStore.set(student.registerNumber, {
       otp,
       expires: Date.now() + 5 * 60 * 1000,
       attempts: 0
@@ -102,7 +108,7 @@ console.log(smsResult);
       });
     }
 
-    console.log(`OTP sent via SMS to ${registerNumber}: ${otp}`);
+    console.log(`OTP sent via SMS to ${student.registerNumber}: ${otp}`);
     
     res.json({ 
       message: 'OTP sent successfully to your registered mobile number',
@@ -728,11 +734,42 @@ router.get('/qr-code', authenticateToken1, async (req, res) => {
 // Get available packages for subscription
 router.get('/packages', authenticateToken1, async (req, res) => {
   try {
+    // Get student details to check hostel
+    const student = await req.prisma.student.findUnique({
+      where: { id: req.user.studentId },
+      include: { hostel: true }
+    });
+
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    // Only hostelers can access packages
+    if (!student.isHosteler) {
+      return res.json({
+        packages: [],
+        message: 'Package subscriptions are only available for hostel residents'
+      });
+    }
+
+    // Get packages available for student's hostel
     const packages = await req.prisma.package.findMany({
       where: { active: true },
-      include: {
+        active: true,
+        hostels: {
+          some: {
+            hostelId: student.hostelId
+          }
+        }
         messFacility: {
           select: { name: true, location: true }
+        },
+        hostels: {
+          include: {
+            hostel: {
+              select: { name: true, type: true }
+            }
+          }
         },
         _count: {
           select: { subscriptions: true }
@@ -967,5 +1004,90 @@ function formatTo12Hour(hhmm) {
   const hour12 = ((hh + 11) % 12) + 1; // convert 0->12, 13->1
   return `${hour12}:${mm.toString().padStart(2, '0')} ${period}`;
 }
+
+// Set meal attendance preference with mandatory check
+router.post('/meals/set-attendance', authenticateToken1, async (req, res) => {
+  try {
+    const { attendanceData } = req.body; // Array of { mealPlanId, willAttend }
+    
+    // Get attendance settings
+    const settings = await req.prisma.mealAttendanceSettings.findFirst();
+    const isMandatory = settings?.isMandatory || false;
+    
+    // Check if within allowed time window
+    const now = new Date();
+    const currentTime = now.toTimeString().slice(0, 5); // HH:MM format
+    const cutoffTime = settings?.cutoffTime || '23:00';
+    
+    if (currentTime > cutoffTime) {
+      return res.status(400).json({ 
+        error: 'Meal attendance marking is closed for today. Please try again tomorrow.' 
+      });
+    }
+
+    // Update attendance preferences
+    for (const attendance of attendanceData) {
+      await req.prisma.mealAttendance.upsert({
+        where: {
+          studentId_mealPlanId: {
+            studentId: req.user.studentId,
+            mealPlanId: attendance.mealPlanId
+          }
+        },
+        update: {
+          willAttend: attendance.willAttend,
+          markedAt: new Date(),
+          isMandatoryMarked: isMandatory
+        },
+        create: {
+          studentId: req.user.studentId,
+          mealPlanId: attendance.mealPlanId,
+          willAttend: attendance.willAttend,
+          markedAt: new Date(),
+          isMandatoryMarked: isMandatory,
+          attended: false
+        }
+      });
+    }
+
+    // Mark reminder as completed
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    await req.prisma.mealAttendanceReminder.updateMany({
+      where: {
+        studentId: req.user.studentId,
+        reminderDate: tomorrow.toISOString().split('T')[0]
+      },
+      data: { completed: true }
+    });
+
+    res.json({ message: 'Meal attendance preferences updated successfully' });
+  } catch (error) {
+    console.error('Set meal attendance error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get meal attendance settings
+router.get('/attendance-settings', authenticateToken1, async (req, res) => {
+  try {
+    const settings = await req.prisma.mealAttendanceSettings.findFirst();
+    
+    if (!settings) {
+      return res.json({
+        isMandatory: false,
+        reminderStartTime: '15:00',
+        reminderEndTime: '22:00',
+        cutoffTime: '23:00'
+      });
+    }
+
+    res.json(settings);
+  } catch (error) {
+    console.error('Get attendance settings error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 export default router;

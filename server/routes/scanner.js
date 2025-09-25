@@ -21,6 +21,10 @@ router.post('/scan', authenticateToken, async (req, res) => {
   try {
     const { qrCode, deviceId } = req.body;
     const mealType = getCurrentMealType();
+    
+    // Get attendance settings
+    const settings = await req.prisma.mealAttendanceSettings.findFirst();
+    const isMandatory = settings?.isMandatory || false;
 
     if (!mealType) {
       return res.status(400).json({ error: 'Not meal time now' });
@@ -61,6 +65,29 @@ router.post('/scan', authenticateToken, async (req, res) => {
           return res.json({ valid: false, error: 'No meal plan available for this meal' });
         }
 
+        // Check if mandatory attendance marking is required
+        if (isMandatory) {
+          const attendanceRecord = await req.prisma.mealAttendance.findUnique({
+            where: {
+              studentId_mealPlanId: { studentId: student.id, mealPlanId: mealPlan.id }
+            }
+          });
+
+          if (!attendanceRecord || !attendanceRecord.isMandatoryMarked) {
+            return res.json({ 
+              valid: false, 
+              error: 'Student has not marked attendance for this meal. Please mark attendance first.' 
+            });
+          }
+
+          if (!attendanceRecord.willAttend) {
+            return res.json({ 
+              valid: false, 
+              error: 'Student marked as not attending this meal.' 
+            });
+          }
+        }
+
         const existingAttendance = await req.prisma.mealAttendance.findUnique({
           where: {
             studentId_mealPlanId: { studentId: student.id, mealPlanId: mealPlan.id }
@@ -71,8 +98,17 @@ router.post('/scan', authenticateToken, async (req, res) => {
           return res.json({ valid: false, error: 'Already served for this meal' });
         }
 
-        await req.prisma.mealAttendance.create({
-          data: {
+        await req.prisma.mealAttendance.upsert({
+          where: {
+            studentId_mealPlanId: { studentId: student.id, mealPlanId: mealPlan.id }
+          },
+          update: {
+            attended: true,
+            attendedAt: new Date(),
+            scannerVerified: true,
+            scannerDeviceId: deviceId
+          },
+          create: {
             studentId: student.id,
             mealPlanId: mealPlan.id,
             attended: true,

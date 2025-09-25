@@ -80,12 +80,8 @@ router.post('/change-password', authenticateToken, async (req, res) => {
 });
 
 // Create SCANNER user
-router.post('/create-scanner', authenticateToken, async (req, res) => {
+router.post('/create-scanner', authenticateToken, requireRole(['FNB_MANAGER', 'ADMIN', 'SUPERADMIN']), async (req, res) => {
   try {
-    // Only FNB_MANAGER or ADMIN can create scanner
-    if (!['FNB_MANAGER', 'ADMIN'].includes(req.user.role)) {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
     const { name, email, password, messFacilityId } = req.body;
     if (!name || !email || !password || !messFacilityId) {
       return res.status(400).json({ error: 'Missing required fields' });

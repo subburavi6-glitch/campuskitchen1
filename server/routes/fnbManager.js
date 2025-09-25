@@ -1022,4 +1022,121 @@ router.put('/students/:id', authenticateToken, requireRole(['FNB_MANAGER', 'ADMI
   }
 });
 
+// Get hostels
+router.get('/hostels', authenticateToken, requireRole(['FNB_MANAGER', 'ADMIN', 'SUPERADMIN']), async (req, res) => {
+  try {
+    const hostels = await req.prisma.hostel.findMany({
+      where: { active: true },
+      include: {
+        _count: {
+          select: { students: true }
+        }
+      },
+      orderBy: { name: 'asc' }
+    });
+
+    res.json(hostels);
+  } catch (error) {
+    console.error('Get hostels error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Create hostel
+router.post('/hostels', authenticateToken, requireRole(['FNB_MANAGER', 'ADMIN', 'SUPERADMIN']), async (req, res) => {
+  try {
+    const hostel = await req.prisma.hostel.create({
+      data: req.body
+    });
+
+    res.status(201).json(hostel);
+  } catch (error) {
+    console.error('Create hostel error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get meal attendance report
+router.get('/meal-attendance-report', authenticateToken, requireRole(['FNB_MANAGER', 'ADMIN', 'SUPERADMIN', 'CHEF']), async (req, res) => {
+  try {
+    const { date } = req.query;
+    const targetDate = date ? new Date(date) : new Date();
+    const dayOfWeek = targetDate.getDay() === 0 ? 6 : targetDate.getDay() - 1;
+
+    // Get all mess facilities
+    const messFacilities = await req.prisma.messFacility.findMany({
+      where: { active: true }
+    });
+
+    const report = [];
+
+    for (const facility of messFacilities) {
+      // Get meal plans for this facility and day
+      const mealPlans = await req.prisma.mealPlan.findMany({
+        where: {
+          messFacilityId: facility.id,
+          day: dayOfWeek
+        },
+        include: {
+          dishes: {
+            include: {
+              dish: true
+            }
+          }
+        }
+      });
+
+      const facilityReport = {
+        messFacility: facility,
+        meals: {}
+      };
+
+      for (const mealPlan of mealPlans) {
+        // Get attendance data
+        const attendanceData = await req.prisma.mealAttendance.findMany({
+          where: {
+            mealPlanId: mealPlan.id
+          },
+          include: {
+            student: {
+              select: {
+                name: true,
+                registerNumber: true,
+                userType: true,
+                hostel: {
+                  select: { name: true }
+                }
+              }
+            }
+          }
+        });
+
+        const willAttendCount = attendanceData.filter(a => a.willAttend).length;
+        const attendedCount = attendanceData.filter(a => a.attended).length;
+        const markedCount = attendanceData.filter(a => a.markedAt).length;
+
+        facilityReport.meals[mealPlan.meal] = {
+          mealPlan,
+          totalMarked: markedCount,
+          willAttend: willAttendCount,
+          attended: attendedCount,
+          attendancePercentage: willAttendCount > 0 ? (attendedCount / willAttendCount * 100).toFixed(1) : 0,
+          dishes: mealPlan.dishes.map(d => d.dish.name).join(', ')
+        };
+      }
+
+      report.push(facilityReport);
+    }
+
+    res.json({
+      date: targetDate.toISOString().split('T')[0],
+      dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][dayOfWeek],
+      facilities: report
+    });
+  } catch (error) {
+    console.error('Get meal attendance report error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

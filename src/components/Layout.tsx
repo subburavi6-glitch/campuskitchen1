@@ -31,34 +31,35 @@ import AlertSystem from './AlertSystem';
 const menuItems = [
   // Core Inventory & Operations
   { path: '/', icon: Home, label: 'Dashboard', roles: ['ADMIN', 'CHEF', 'STORE', 'COOK', 'VIEWER'] },
-  { path: '/items', icon: Package, label: 'Items', roles: ['ADMIN', 'CHEF', 'STORE', 'COOK', 'VIEWER'] },
-  { path: '/vendors', icon: Users, label: 'Vendors', roles: ['ADMIN', 'STORE'] },
-  { path: '/purchase-orders', icon: ShoppingCart, label: 'Purchase Orders', roles: ['ADMIN', 'STORE'] },
-  { path: '/grn', icon: FileText, label: 'GRN', roles: ['ADMIN', 'STORE'] },
-  { path: '/indents', icon: ClipboardList, label: 'Indents', roles: ['ADMIN', 'CHEF', 'STORE', 'COOK'] },
-  { path: '/issues', icon: Send, label: 'Indent Issues', roles: ['ADMIN', 'STORE'] },
+  { path: '/items', icon: Package, label: 'Items', roles: ['ADMIN', 'SUPERADMIN', 'CHEF', 'STORE', 'COOK', 'VIEWER'] },
+  { path: '/vendors', icon: Users, label: 'Vendors', roles: ['ADMIN', 'SUPERADMIN', 'STORE'] },
+  { path: '/purchase-orders', icon: ShoppingCart, label: 'Purchase Orders', roles: ['ADMIN', 'SUPERADMIN', 'STORE'] },
+  { path: '/grn', icon: FileText, label: 'GRN', roles: ['ADMIN', 'SUPERADMIN', 'STORE'] },
+  { path: '/indents', icon: ClipboardList, label: 'Indents', roles: ['ADMIN', 'SUPERADMIN', 'CHEF', 'STORE', 'COOK'] },
+  { path: '/issues', icon: Send, label: 'Indent Issues', roles: ['ADMIN', 'SUPERADMIN', 'STORE'] },
   
   // Food & Menu Management
-  { path: '/dishes', icon: Chef, label: 'Dishes', roles: ['ADMIN', 'CHEF', 'FNB_MANAGER'] },
-  { path: '/meal-plans', icon: Calendar, label: 'Meal Plans', roles: ['ADMIN', 'CHEF', 'FNB_MANAGER'] },
+  { path: '/dishes', icon: Chef, label: 'Dishes', roles: ['ADMIN', 'SUPERADMIN', 'CHEF', 'FNB_MANAGER'] },
+  { path: '/meal-plans', icon: Calendar, label: 'Meal Plans', roles: ['ADMIN', 'SUPERADMIN', 'CHEF', 'FNB_MANAGER'] },
   
   // FNB Manager Section
-  { path: '/fnb-dashboard', icon: BarChart3, label: 'FNB Dashboard', roles: ['FNB_MANAGER'] },
-  { path: '/mess-facilities', icon: Building, label: 'Mess Facilities', roles: ['FNB_MANAGER'] },
-  { path: '/packages', icon: Package, label: 'Packages', roles: ['FNB_MANAGER'] },
-  { path: '/subscriptions', icon: CreditCard, label: 'Subscriptions', roles: ['FNB_MANAGER'] },
-  { path: '/student-orders', icon: ShoppingCart, label: 'Orders', roles: ['FNB_MANAGER'] },
+  { path: '/fnb-dashboard', icon: BarChart3, label: 'FNB Dashboard', roles: ['FNB_MANAGER', 'SUPERADMIN'] },
+  { path: '/mess-facilities', icon: Building, label: 'Mess Facilities', roles: ['FNB_MANAGER', 'SUPERADMIN'] },
+  { path: '/packages', icon: Package, label: 'Packages', roles: ['FNB_MANAGER', 'SUPERADMIN'] },
+  { path: '/subscriptions', icon: CreditCard, label: 'Subscriptions', roles: ['FNB_MANAGER', 'SUPERADMIN'] },
+  { path: '/student-orders', icon: ShoppingCart, label: 'Orders', roles: ['FNB_MANAGER', 'SUPERADMIN'] },
+  { path: '/meal-attendance-report', icon: Calendar, label: 'Meal Attendance', roles: ['FNB_MANAGER', 'CHEF', 'ADMIN', 'SUPERADMIN'] },
   
-  { path: '/student-photos', icon: User, label: 'Customers', roles: ['FNB_MANAGER', 'ADMIN'] },
-  { path: '/csv-uploads', icon: Upload, label: 'CSV Uploads', roles: ['FNB_MANAGER','ADMIN'] },
-  { path: '/reports', icon: BarChart3, label: 'Reports', roles: ['FNB_MANAGER'] },
-  { path: '/transaction-reports', icon: DollarSign, label: 'Transaction Reports', roles: ['FNB_MANAGER'] },
+  { path: '/student-photos', icon: User, label: 'Customers', roles: ['FNB_MANAGER', 'ADMIN', 'SUPERADMIN'] },
+  { path: '/csv-uploads', icon: Upload, label: 'CSV Uploads', roles: ['FNB_MANAGER','ADMIN', 'SUPERADMIN'] },
+  { path: '/reports', icon: BarChart3, label: 'Reports', roles: ['FNB_MANAGER', 'SUPERADMIN'] },
+  { path: '/transaction-reports', icon: DollarSign, label: 'Transaction Reports', roles: ['FNB_MANAGER', 'SUPERADMIN'] },
 
   // System Administration
-  { path: '/users', icon: Users, label: 'Users', roles: ['ADMIN'] },
-  { path: '/settings', icon: Settings, label: 'Settings', roles: ['ADMIN'] },
-  { path: '/system-config', icon: Cog, label: 'System Config', roles: ['ADMIN'] },
-  { path: '/admin-config', icon: Database, label: 'Admin Config', roles: ['ADMIN'] },
+  { path: '/users', icon: Users, label: 'Users', roles: ['ADMIN', 'SUPERADMIN'] },
+  { path: '/settings', icon: Settings, label: 'Settings', roles: ['ADMIN', 'SUPERADMIN'] },
+  { path: '/system-config', icon: Cog, label: 'System Config', roles: ['ADMIN', 'SUPERADMIN'] },
+  { path: '/admin-config', icon: Database, label: 'Admin Config', roles: ['ADMIN', 'SUPERADMIN'] },
 ];
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -357,7 +358,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             </div>
             <div className="ml-3">
               <p className="text-sm font-medium text-gray-700">{user?.name}</p>
-              <p className="text-xs text-gray-500">{user?.role}</p>
+              <p className="text-xs text-gray-500">{user?.role === 'SUPERADMIN' ? 'Super Admin' : user?.role}</p>
             </div>
           </div>
           <button

@@ -242,7 +242,49 @@ async function sendPushNotification(studentId, title, message, prisma) {
     }
   } catch (error) {
     console.error('Send push notification error:', error);
+// Handle push notification clicks with deep linking
+router.post('/handle-notification-click', authenticateToken1, async (req, res) => {
+  try {
+    const { notificationId, notificationType, relatedId } = req.body;
+
+    // Mark notification as read
+    if (notificationId) {
+      await req.prisma.notification.update({
+        where: { id: notificationId },
+        data: { read: true }
+      });
+    }
   }
+    // Return deep link information based on notification type
+    let deepLink = { screen: 'Home', params: {} };
+
+    switch (notificationType) {
+      case 'order':
+        deepLink = { screen: 'OrderHistory', params: { orderId: relatedId } };
+        break;
+      case 'meal_attendance':
+        deepLink = { screen: 'MealPlan', params: { date: new Date().toISOString().split('T')[0] } };
+        break;
+      case 'rating':
+        if (relatedId) {
+          const mealPlan = await req.prisma.mealPlan.findUnique({
+            where: { id: relatedId }
+          });
+          deepLink = { screen: 'Rating', params: { mealPlanId: relatedId } };
+        }
+        break;
+      case 'subscription':
+        deepLink = { screen: 'Subscription', params: {} };
+        break;
+      default:
+        deepLink = { screen: 'Notifications', params: {} };
+    }
 }
+    res.json({ deepLink });
+  } catch (error) {
+    console.error('Handle notification click error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 export default router;

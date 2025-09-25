@@ -654,6 +654,9 @@ async function main() {
         roomNumber: 'A-101',
         userType: 'STUDENT',
         department: 'Computer Science',
+        isHosteler: true,
+        hostelId: 'hostel-002', // Boys hostel
+        messName: 'Boys Hostel - Nursing',
         qrCode: `QR_CS2021001_${crypto.randomBytes(8).toString('hex')}`
       }
     }),
@@ -668,6 +671,7 @@ async function main() {
         userType: 'EMPLOYEE',
         employeeId: 'EMP001',
         department: 'Computer Science',
+        isHosteler: false,
         qrCode: `QR_EMP001_${crypto.randomBytes(8).toString('hex')}`
       }
     }),
@@ -682,7 +686,82 @@ async function main() {
         roomNumber: 'B-205',
         userType: 'STUDENT',
         department: 'Nursing',
+        isHosteler: true,
+        hostelId: 'hostel-001', // Girls hostel
+        messName: 'Girls Hostel - Nursing',
         qrCode: `QR_NS2021001_${crypto.randomBytes(8).toString('hex')}`
+      }
+    }),
+  ]);
+
+  // Link packages to hostels
+  console.log('Linking packages to hostels...');
+  await Promise.all([
+    // Basic Monthly Plan for both hostels
+    prisma.packageHostel.upsert({
+      where: {
+        packageId_hostelId: {
+          packageId: '660e8400-e29b-41d4-a716-446655440001',
+          hostelId: 'hostel-001'
+        }
+      },
+      update: {},
+      create: {
+        packageId: '660e8400-e29b-41d4-a716-446655440001',
+        hostelId: 'hostel-001'
+      }
+    }),
+    prisma.packageHostel.upsert({
+      where: {
+        packageId_hostelId: {
+          packageId: '660e8400-e29b-41d4-a716-446655440001',
+          hostelId: 'hostel-002'
+        }
+      },
+      update: {},
+      create: {
+        packageId: '660e8400-e29b-41d4-a716-446655440001',
+        hostelId: 'hostel-002'
+      }
+    }),
+    // Full Monthly Plan for all hostels
+    prisma.packageHostel.upsert({
+      where: {
+        packageId_hostelId: {
+          packageId: '660e8400-e29b-41d4-a716-446655440002',
+          hostelId: 'hostel-001'
+        }
+      },
+      update: {},
+      create: {
+        packageId: '660e8400-e29b-41d4-a716-446655440002',
+        hostelId: 'hostel-001'
+      }
+    }),
+    prisma.packageHostel.upsert({
+      where: {
+        packageId_hostelId: {
+          packageId: '660e8400-e29b-41d4-a716-446655440002',
+          hostelId: 'hostel-002'
+        }
+      },
+      update: {},
+      create: {
+        packageId: '660e8400-e29b-41d4-a716-446655440002',
+        hostelId: 'hostel-002'
+      }
+    }),
+    prisma.packageHostel.upsert({
+      where: {
+        packageId_hostelId: {
+          packageId: '660e8400-e29b-41d4-a716-446655440002',
+          hostelId: 'hostel-003'
+        }
+      },
+      update: {},
+      create: {
+        packageId: '660e8400-e29b-41d4-a716-446655440002',
+        hostelId: 'hostel-003'
       }
     }),
   ]);

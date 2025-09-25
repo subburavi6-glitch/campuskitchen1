@@ -141,6 +141,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onSuccess, onCancel }) => {
             <option value="CHEF">Chef</option>
             <option value="STORE">Store Manager</option>
             <option value="ADMIN">Administrator</option>
+            <option value="SUPERADMIN">Super Administrator</option>
             <option value="FNB_MANAGER">FNB Manager</option>
             <option value="SCANNER">Scanner</option>
           </select>
@@ -208,6 +209,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onSuccess, onCancel }) => {
       <div className="bg-yellow-50 p-4 rounded-lg">
         <h4 className="font-medium text-yellow-800 mb-2">Role Permissions:</h4>
         <div className="text-sm text-yellow-700 space-y-1">
+          <p><strong>Super Admin:</strong> Complete system access with all privileges</p>
           <p><strong>Admin:</strong> Full system access</p>
           <p><strong>Chef:</strong> Menu planning, dish management, indent approval</p>
           <p><strong>Store:</strong> Inventory, purchase orders, GRN, stock issues</p>

@@ -6,28 +6,69 @@ import { sendPushNotification } from '../services/notificationService.js';
 
 const router = express.Router();
 
-// Initialize Razorpay instance
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
+// Get active payment gateway
+const getActivePaymentGateway = async (prisma) => {
+  const gateway = await prisma.paymentGateway.findFirst({
+    where: { 
+      active: true,
+      type: 'RAZORPAY'
+    }
+  });
+  
+  if (!gateway) {
+    throw new Error('No active payment gateway configured');
+  }
+  
+  return new Razorpay({
+    key_id: gateway.keyId,
+    key_secret: gateway.keySecret,
+  });
+};
 
 // Create Razorpay order for subscription
 router.post('/create-order', authenticateToken1, async (req, res) => {
   try {
     const { packageId, messFacilityId } = req.body;
 
+    // Check if student is hosteler
+    const student = await req.prisma.student.findUnique({
+      where: { id: req.user.studentId },
+      include: { hostel: true }
+    });
+
+    if (!student || !student.isHosteler) {
+      return res.status(403).json({ 
+        error: 'Package subscriptions are only available for hostel residents' 
+      });
+    }
+
     // Fetch package
     const pkg = await req.prisma.package.findUnique({
       where: { id: packageId },
       include: {
         messFacility: { select: { name: true } },
+        hostels: {
+          include: {
+            hostel: { select: { name: true } }
+          }
+        }
       },
     });
 
     if (!pkg) {
       return res.status(404).json({ error: 'Package not found' });
     }
+
+    // Check if package is available for student's hostel
+    const isPackageAvailable = pkg.hostels.some(ph => ph.hostelId === student.hostelId);
+    if (!isPackageAvailable) {
+      return res.status(403).json({ 
+        error: 'This package is not available for your hostel' 
+      });
+    }
+
+    // Get active payment gateway
+    const razorpay = await getActivePaymentGateway(req.prisma);
 
     const receipt = `R_${Math.random().toString(36).substring(2, 15)}`;
 
@@ -81,6 +122,9 @@ router.post('/create-food-order', authenticateToken1, async (req, res) => {
   try {
     const { orderId } = req.body;
 
+    // Get active payment gateway
+    const razorpay = await getActivePaymentGateway(req.prisma);
+
     // Get order details
     const order = await req.prisma.order.findUnique({
       where: { id: orderId },
@@ -133,11 +177,20 @@ router.post('/verify-payment', authenticateToken1, async (req, res) => {
   try {
     const { razorpayOrderId, razorpayPaymentId, razorpaySignature, subscriptionId } = req.body;
 
+    // Get active payment gateway for signature verification
+    const gateway = await req.prisma.paymentGateway.findFirst({
+      where: { active: true, type: 'RAZORPAY' }
+    });
+
+    if (!gateway) {
+      return res.status(500).json({ error: 'Payment gateway not configured' });
+    }
+
     const body = `${razorpayOrderId}|${razorpayPaymentId}`;
 
     // Generate signature with Razorpay secret
     const expectedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .createHmac('sha256', gateway.keySecret)
       .update(body.toString())
       .digest('hex');
 
@@ -205,11 +258,20 @@ router.post('/verify-food-payment', authenticateToken1, async (req, res) => {
   try {
     const { razorpayOrderId, razorpayPaymentId, razorpaySignature, orderId } = req.body;
 
+    // Get active payment gateway for signature verification
+    const gateway = await req.prisma.paymentGateway.findFirst({
+      where: { active: true, type: 'RAZORPAY' }
+    });
+
+    if (!gateway) {
+      return res.status(500).json({ error: 'Payment gateway not configured' });
+    }
+
     const body = `${razorpayOrderId}|${razorpayPaymentId}`;
 
     // Generate signature with Razorpay secret
     const expectedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .createHmac('sha256', gateway.keySecret)
       .update(body.toString())
       .digest('hex');
 
@@ -276,8 +338,17 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     const signature = req.headers['x-razorpay-signature'];
     const body = req.body;
 
+    // Get active payment gateway for webhook verification
+    const gateway = await req.prisma.paymentGateway.findFirst({
+      where: { active: true, type: 'RAZORPAY' }
+    });
+
+    if (!gateway || !gateway.webhookSecret) {
+      return res.status(500).json({ error: 'Webhook secret not configured' });
+    }
+
     const expectedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET)
+      .createHmac('sha256', gateway.webhookSecret)
       .update(body)
       .digest('hex');
 

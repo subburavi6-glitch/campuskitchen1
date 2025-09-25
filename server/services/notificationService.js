@@ -213,6 +213,175 @@ cron.schedule('0 9 * * *', async () => {
   }
 });
 
+// Send meal attendance reminders at 3 PM daily
+cron.schedule('0 15 * * *', async () => {
+  try {
+    console.log('Sending meal attendance reminders...');
+    
+    const settings = await prisma.mealAttendanceSettings.findFirst();
+    const reminderStartTime = settings?.reminderStartTime || '15:00';
+    const reminderEndTime = settings?.reminderEndTime || '22:00';
+    const isMandatory = settings?.isMandatory || false;
+    
+    const now = new Date();
+    const currentTime = now.toTimeString().slice(0, 5);
+    
+    // Only send if within reminder window
+    if (currentTime < reminderStartTime || currentTime > reminderEndTime) {
+      return;
+    }
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowDate = tomorrow.toISOString().split('T')[0];
+    const dayOfWeek = tomorrow.getDay() === 0 ? 6 : tomorrow.getDay() - 1;
+
+    // Get all active hosteler students
+    const students = await prisma.student.findMany({
+      where: {
+        isHosteler: true,
+        subscriptions: {
+          some: {
+            status: 'ACTIVE',
+            startDate: { lte: tomorrow },
+            endDate: { gte: tomorrow }
+          }
+        }
+      },
+      include: {
+        subscriptions: {
+          where: {
+            status: 'ACTIVE',
+            startDate: { lte: tomorrow },
+            endDate: { gte: tomorrow }
+          },
+          include: {
+            package: true,
+            messFacility: true
+          }
+        }
+      }
+    });
+
+    for (const student of students) {
+      // Check if reminder already sent today
+      const existingReminder = await prisma.mealAttendanceReminder.findUnique({
+        where: {
+          studentId_reminderDate: {
+            studentId: student.id,
+            reminderDate: tomorrowDate
+          }
+        }
+      });
+
+      if (existingReminder && existingReminder.completed) continue;
+
+      // Get tomorrow's meal plans for student's mess facilities
+      const messFacilityIds = student.subscriptions.map(s => s.messFacilityId);
+      const mealPlans = await prisma.mealPlan.findMany({
+        where: {
+          messFacilityId: { in: messFacilityIds },
+          day: dayOfWeek
+        },
+        include: {
+          dishes: {
+            include: {
+              dish: true
+            }
+          }
+        }
+      });
+
+      if (mealPlans.length === 0) continue;
+
+      // Check which meals need attendance marking
+      const pendingMeals = [];
+      for (const mealPlan of mealPlans) {
+        const hasSubscription = student.subscriptions.some(s => 
+          s.messFacilityId === mealPlan.messFacilityId && 
+          s.package.mealsIncluded.includes(mealPlan.meal)
+        );
+
+        if (!hasSubscription) continue;
+
+        const attendanceRecord = await prisma.mealAttendance.findUnique({
+          where: {
+            studentId_mealPlanId: {
+              studentId: student.id,
+              mealPlanId: mealPlan.id
+            }
+          }
+        });
+
+        if (!attendanceRecord || !attendanceRecord.markedAt) {
+          pendingMeals.push(mealPlan.meal);
+        }
+      }
+
+      if (pendingMeals.length === 0) continue;
+
+      // Create or update reminder record
+      await prisma.mealAttendanceReminder.upsert({
+        where: {
+          studentId_reminderDate: {
+            studentId: student.id,
+            reminderDate: tomorrowDate
+          }
+        },
+        update: {
+          mealsPending: pendingMeals,
+          reminderSentAt: new Date()
+        },
+        create: {
+          studentId: student.id,
+          reminderDate: tomorrowDate,
+          mealsPending: pendingMeals,
+          reminderSentAt: new Date()
+        }
+      });
+
+      // Create notification
+      const notificationTitle = isMandatory 
+        ? 'Mark Tomorrow\'s Meal Attendance (Required)'
+        : 'Mark Tomorrow\'s Meal Attendance';
+      
+      const notificationMessage = `Please mark your attendance for tomorrow's meals: ${pendingMeals.join(', ')}. ${
+        isMandatory ? 'This is mandatory for mess entry.' : 'This helps us plan better.'
+      }`;
+
+      await prisma.notification.create({
+        data: {
+          studentId: student.id,
+          title: notificationTitle,
+          message: notificationMessage,
+          type: 'meal_attendance'
+        }
+      });
+
+      // Send push notification
+      await sendPushNotification(
+        student.id,
+        notificationTitle,
+        notificationMessage
+      );
+    }
+  } catch (error) {
+    console.error('Meal attendance reminder cron error:', error);
+  }
+});
+
+// Close meal attendance marking at 11 PM
+cron.schedule('0 23 * * *', async () => {
+  try {
+    console.log('Closing meal attendance marking for today...');
+    
+    // This is handled by time check in the API, but we can log it
+    console.log('Meal attendance marking window closed at 11 PM');
+  } catch (error) {
+    console.error('Meal attendance close cron error:', error);
+  }
+});
+
 // Helper function to send push notifications
 async function sendPushNotification(studentId, title, message) {
   try {

@@ -155,4 +155,107 @@ router.post('/meal-times', authenticateToken, requireRole(['ADMIN']), async (req
   }
 });
 
+// Get meal attendance settings
+router.get('/meal-attendance-settings', authenticateToken, async (req, res) => {
+  try {
+    const settings = await req.prisma.mealAttendanceSettings.findFirst();
+    
+    if (!settings) {
+      // Return default settings
+      return res.json({
+        isMandatory: false,
+        reminderStartTime: '15:00',
+        reminderEndTime: '22:00',
+        cutoffTime: '23:00'
+      });
+    }
+
+    res.json(settings);
+  } catch (error) {
+    console.error('Get meal attendance settings error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update meal attendance settings
+router.post('/meal-attendance-settings', authenticateToken, requireRole(['ADMIN', 'SUPERADMIN']), async (req, res) => {
+  try {
+    const { isMandatory, reminderStartTime, reminderEndTime, cutoffTime } = req.body;
+    
+    const settings = await req.prisma.mealAttendanceSettings.upsert({
+      where: { id: 'default-settings' },
+      update: {
+        isMandatory,
+        reminderStartTime,
+        reminderEndTime,
+        cutoffTime
+      },
+      create: {
+        id: 'default-settings',
+        isMandatory,
+        reminderStartTime,
+        reminderEndTime,
+        cutoffTime
+      }
+    });
+    
+    res.json({ message: 'Meal attendance settings updated successfully', settings });
+  } catch (error) {
+    console.error('Update meal attendance settings error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get payment gateways
+router.get('/payment-gateways', authenticateToken, requireRole(['ADMIN', 'SUPERADMIN']), async (req, res) => {
+  try {
+    const gateways = await req.prisma.paymentGateway.findMany({
+      orderBy: { name: 'asc' }
+    });
+
+    res.json(gateways);
+  } catch (error) {
+    console.error('Get payment gateways error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Create/Update payment gateway
+router.post('/payment-gateways', authenticateToken, requireRole(['ADMIN', 'SUPERADMIN']), async (req, res) => {
+  try {
+    const { id, ...gatewayData } = req.body;
+    
+    let gateway;
+    if (id) {
+      gateway = await req.prisma.paymentGateway.update({
+        where: { id },
+        data: gatewayData
+      });
+    } else {
+      gateway = await req.prisma.paymentGateway.create({
+        data: gatewayData
+      });
+    }
+
+    res.json(gateway);
+  } catch (error) {
+    console.error('Save payment gateway error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete payment gateway
+router.delete('/payment-gateways/:id', authenticateToken, requireRole(['ADMIN', 'SUPERADMIN']), async (req, res) => {
+  try {
+    await req.prisma.paymentGateway.delete({
+      where: { id: req.params.id }
+    });
+    
+    res.json({ message: 'Payment gateway deleted successfully' });
+  } catch (error) {
+    console.error('Delete payment gateway error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

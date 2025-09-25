@@ -349,9 +349,10 @@ const Packages: React.FC = () => {
 const PackageForm: React.FC<{
   package?: Package | null;
   messFacilities: any[];
+  hostels: any[];
   onSuccess: () => void;
   onCancel: () => void;
-}> = ({ package: pkg, messFacilities, onSuccess, onCancel }) => {
+}> = ({ package: pkg, messFacilities, hostels, onSuccess, onCancel }) => {
   const [formData, setFormData] = useState({
     name: pkg?.name || '',
     description: pkg?.description || '',
@@ -359,7 +360,8 @@ const PackageForm: React.FC<{
     durationDays: pkg?.durationDays || 30,
     price: pkg?.price || 0,
     mealsIncluded: pkg?.mealsIncluded || [],
-    active: pkg?.active ?? true
+    active: pkg?.active ?? true,
+    selectedHostels: pkg?.hostels?.map((h: any) => h.hostelId) || []
   });
   const [loading, setLoading] = useState(false);
 
@@ -370,7 +372,11 @@ const PackageForm: React.FC<{
     setLoading(true);
 
     try {
-      if (pkg) {
+      const data = { 
+        ...formData, 
+        messFacilityId: facilityId,
+        hostelIds: formData.selectedHostels
+      };
         await api.put(`/fnb-manager/packages/${pkg.id}`, formData);
         toast.success('Package updated successfully');
       } else {
@@ -395,6 +401,15 @@ const PackageForm: React.FC<{
       mealsIncluded: prev.mealsIncluded.includes(meal)
         ? prev.mealsIncluded.filter(m => m !== meal)
         : [...prev.mealsIncluded, meal]
+    }));
+  };
+
+  const toggleHostel = (hostelId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      selectedHostels: prev.selectedHostels.includes(hostelId)
+        ? prev.selectedHostels.filter(h => h !== hostelId)
+        : [...prev.selectedHostels, hostelId]
     }));
   };
 
@@ -495,6 +510,26 @@ const PackageForm: React.FC<{
               </label>
             ))}
           </div>
+        </div>
+
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Applicable Hostels *
+          </label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-32 overflow-y-auto border border-gray-200 rounded-lg p-3">
+            {hostels.map((hostel: any) => (
+              <label key={hostel.id} className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.selectedHostels.includes(hostel.id)}
+                  onChange={() => toggleHostel(hostel.id)}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <span className="text-sm text-gray-700">{hostel.name} ({hostel.type})</span>
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-gray-500 mt-1">Select which hostels can purchase this package</p>
         </div>
 
         <div className="md:col-span-2">

@@ -444,6 +444,15 @@ async function processStudentsCSV(data, errors, prisma) {
         continue;
       }
 
+      // Find hostel if specified
+      let hostelId = null;
+      if (row.hostel_name) {
+        const hostel = await prisma.hostel.findFirst({
+          where: { name: row.hostel_name }
+        });
+        hostelId = hostel?.id;
+      }
+
       const qrCode = `QR_${row.register_number}_${Math.random().toString(36).substr(2, 8)}`;
       
       await prisma.student.upsert({
@@ -456,7 +465,11 @@ async function processStudentsCSV(data, errors, prisma) {
           userType: (row.user_type && ['STUDENT', 'EMPLOYEE'].includes(row.user_type)) ? row.user_type : 'STUDENT',
           employeeId: row.employee_id || null,
           department: row.department || null,
-          photoUrl: row.photo_url || null
+          photoUrl: row.photo_url || null,
+          isHosteler: row.is_hosteler === 'true' || row.is_hosteler === '1',
+          hostelId: hostelId,
+          messName: row.mess_name || null,
+          mobileLoginEnabled: row.mobile_login_enabled !== 'false'
         },
         create: {
           registerNumber: row.register_number,
@@ -468,7 +481,11 @@ async function processStudentsCSV(data, errors, prisma) {
           userType: (row.user_type && ['STUDENT', 'EMPLOYEE'].includes(row.user_type)) ? row.user_type : 'STUDENT',
           employeeId: row.employee_id || null,
           department: row.department || null,
-          photoUrl: row.photo_url || null
+          photoUrl: row.photo_url || null,
+          isHosteler: row.is_hosteler === 'true' || row.is_hosteler === '1',
+          hostelId: hostelId,
+          messName: row.mess_name || null,
+          mobileLoginEnabled: row.mobile_login_enabled !== 'false'
         }
       });
     } catch (error) {
