@@ -1,0 +1,855 @@
+// schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String     @id @default(uuid())
+  name           String
+  email          String     @unique
+  phone          String?
+  passwordHash   String     @map("password_hash")
+  role           UserRole
+  status         UserStatus @default(ACTIVE)
+  messFacilityId String?    @map("mess_facility_id")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  purchaseOrders PurchaseOrder[]
+  grns           GRN[]
+  indents        Indent[]
+  issues         Issue[]
+  auditLogs      AuditLog[]
+  stockLedger    StockLedger[]
+  studentPhotos  StudentPhoto[]  @relation("StudentPhotoUploader")
+  csvUploads     CsvUpload[]
+  scannerLogs    ScannerLog[]
+  messFacility   MessFacility?   @relation(fields: [messFacilityId], references: [id])
+
+  @@map("users")
+}
+
+// =====================================
+// Mess App Mobile Tables
+// =====================================
+
+model Student {
+  id             String   @id @default(uuid())
+  registerNumber String   @unique @map("register_number")
+  name           String
+  mobileNumber   String?  @map("mobile_number")
+  email          String?
+  roomNumber     String?  @map("room_number")
+  qrCode         String   @unique @map("qr_code")
+  userType       UserType @default(STUDENT) @map("user_type")
+  employeeId     String?  @map("employee_id")
+  department     String?
+  photoUrl       String?  @map("photo_url")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  attendances    MealAttendance[]
+  ratings        MealRating[]
+  notifications  Notification[]
+  subscriptions  Subscription[]
+  pushTokens     PushToken[]
+  ratingRequests RatingRequest[]
+  studentPhotos  StudentPhoto[]
+  scannerLogs    ScannerLog[]
+  orders         Order[]
+
+  @@map("students")
+}
+
+model StudentPhoto {
+  id         String   @id @default(uuid())
+  studentId  String   @map("student_id")
+  photoUrl   String   @map("photo_url")
+  uploadedBy String?  @map("uploaded_by")
+  isPrimary  Boolean  @default(true) @map("is_primary")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  student  Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  uploader User?   @relation(fields: [uploadedBy], references: [id], name: "StudentPhotoUploader")
+
+  @@map("student_photos")
+}
+
+model MessFacility {
+  id        String   @id @default(uuid())
+  name      String
+  location  String?
+  capacity  Int      @default(0)
+  imageUrl  String?  @map("image_url")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  packages      Package[]
+  subscriptions Subscription[]
+  mealPlans     MealPlan[]
+  menuItems     MenuItem[]
+  orders        Order[]
+  users         User[]
+
+  @@map("mess_facilities")
+}
+
+model Package {
+  id             String     @id @default(uuid())
+  name           String
+  description    String?
+  messFacilityId String     @map("mess_facility_id")
+  durationDays   Int        @map("duration_days")
+  price          Decimal    @db.Decimal(10, 2)
+  mealsIncluded  MealType[] @map("meals_included")
+  active         Boolean    @default(true)
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  messFacility  MessFacility   @relation(fields: [messFacilityId], references: [id], onDelete: Cascade)
+  subscriptions Subscription[]
+
+  @@map("packages")
+}
+
+model Subscription {
+  id                String             @id @default(uuid())
+  studentId         String             @map("student_id")
+  packageId         String             @map("package_id")
+  messFacilityId    String             @map("mess_facility_id")
+  startDate         DateTime           @map("start_date") @db.Date
+  endDate           DateTime           @map("end_date") @db.Date
+  status            SubscriptionStatus @default(ACTIVE)
+  amountPaid        Decimal            @map("amount_paid") @db.Decimal(10, 2)
+  razorpayOrderId   String?            @map("razorpay_order_id")
+  razorpayPaymentId String?            @map("razorpay_payment_id")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  // Relations
+  student      Student                   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  package      Package                   @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  messFacility MessFacility              @relation(fields: [messFacilityId], references: [id], onDelete: Cascade)
+  transactions SubscriptionTransaction[]
+
+  @@map("subscriptions")
+}
+
+model SubscriptionTransaction {
+  id                String            @id @default(uuid())
+  subscriptionId    String            @map("subscription_id")
+  razorpayOrderId   String            @map("razorpay_order_id")
+  razorpayPaymentId String?           @map("razorpay_payment_id")
+  amount            Decimal           @db.Decimal(10, 2)
+  currency          String            @default("INR")
+  status            TransactionStatus @default(PENDING)
+  webhookData       Json?             @map("webhook_data")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@map("subscription_transactions")
+}
+
+model PushToken {
+  id        String   @id @default(uuid())
+  studentId String   @map("student_id")
+  token     String
+  platform  String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, token])
+  @@map("push_tokens")
+}
+
+model RatingRequest {
+  id                 String   @id @default(uuid())
+  studentId          String   @map("student_id")
+  mealPlanId         String   @map("meal_plan_id")
+  notificationSentAt DateTime @map("notification_sent_at")
+  ratingSubmitted    Boolean  @default(false) @map("rating_submitted")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  // Relations
+  student  Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  mealPlan MealPlan @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, mealPlanId])
+  @@map("rating_requests")
+}
+
+model MealPlan {
+  id              String   @id @default(uuid())
+  messFacilityId  String   @map("mess_facility_id")
+  day             Int
+  meal            MealType
+  plannedStudents Int      @map("planned_students")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  messFacility   MessFacility     @relation(fields: [messFacilityId], references: [id], onDelete: Cascade)
+  dishes         MealPlanDish[]
+  attendances    MealAttendance[]
+  ratings        MealRating[]
+  ratingRequests RatingRequest[]
+  notifications  Notification[]   // ADDED: New relation for notifications
+  
+  @@unique([messFacilityId, day, meal])
+  @@map("meal_plans")
+}
+
+
+model MealPlanDish {
+  id            String  @id @default(uuid())
+  mealPlanId    String  @map("meal_plan_id")
+  dishId        String  @map("dish_id")
+  sequenceOrder Int     @default(1) @map("sequence_order")
+  isMainDish    Boolean @default(false) @map("is_main_dish")
+
+  // Relations
+  mealPlan MealPlan @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+  dish     Dish     @relation(fields: [dishId], references: [id], onDelete: Cascade)
+
+  @@unique([mealPlanId, dishId])
+  @@map("meal_plan_dishes")
+}
+
+model MealAttendance {
+  id              String    @id @default(uuid())
+  studentId       String    @map("student_id")
+  mealPlanId      String    @map("meal_plan_id")
+  attended        Boolean   @default(false)
+  willAttend      Boolean   @default(true)
+  attendedAt      DateTime? @map("attended_at")
+  scannerVerified Boolean   @default(false) @map("scanner_verified")
+  scannerDeviceId String?   @map("scanner_device_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  student  Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  mealPlan MealPlan @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, mealPlanId])
+  @@map("meal_attendances")
+}
+
+model ScannerLog {
+  id              String    @id @default(uuid())
+  deviceId        String    @map("device_id")
+  studentId       String?   @map("student_id")
+  qrCodeScanned   String    @map("qr_code_scanned")
+  scanResult      String    @map("scan_result")
+  mealType        MealType? @map("meal_type")
+  accessGranted   Boolean   @default(false) @map("access_granted")
+  errorMessage    String?   @map("error_message")
+  studentName     String?   @map("student_name")
+  studentPhotoUrl String?   @map("student_photo_url")
+  scannedAt       DateTime  @default(now()) @map("scanned_at")
+
+  // Relations
+  student Student? @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  user    User?    @relation(fields: [deviceId], references: [id])
+
+  @@map("scanner_logs")
+}
+
+model MealRating {
+  id         String   @id @default(uuid())
+  studentId  String   @map("student_id")
+  mealPlanId String   @map("meal_plan_id")
+  rating     Int
+  comment    String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  student  Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  mealPlan MealPlan @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, mealPlanId])
+  @@map("meal_ratings")
+}
+
+model Notification {
+  id         String   @id @default(uuid())
+  studentId  String?  @map("student_id")
+  title      String
+  message    String
+  type       String   @default("general")
+  read       Boolean  @default(false)
+  mealPlanId String?  @map("meal_plan_id") // ADDED: New field for meal plan reference
+  createdAt  DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  student  Student?  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  mealPlan MealPlan? @relation(fields: [mealPlanId], references: [id], onDelete: Cascade) // ADDED: New relation
+  
+  @@map("notifications")
+}
+
+
+model MenuItem {
+  id              String   @id @default(uuid())
+  messFacilityId  String   @map("mess_facility_id")
+  name            String
+  description     String?
+  mealType        MealType @map("meal_type")
+  price           Decimal  @db.Decimal(10, 2)
+  imageUrl        String?  @map("image_url")
+  available       Boolean  @default(true)
+  preparationTime Int      @default(0) @map("preparation_time")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  messFacility MessFacility @relation(fields: [messFacilityId], references: [id], onDelete: Cascade)
+  orderItems   OrderItem[]
+
+  @@map("menu_items")
+}
+
+model Order {
+  id                  String      @id @default(uuid())
+  studentId           String      @map("student_id")
+  messFacilityId      String      @map("mess_facility_id")
+  orderNumber         String      @unique @map("order_number")
+  mealType            MealType    @map("meal_type")
+  totalAmount         Decimal     @map("total_amount") @db.Decimal(10, 2)
+  status              OrderStatus @default(PENDING)
+  paymentStatus       String      @default("PENDING") @map("payment_status")
+  razorpayOrderId     String?     @map("razorpay_order_id")
+  razorpayPaymentId   String?     @map("razorpay_payment_id")
+  specialInstructions String?     @map("special_instructions")
+  servedAt            DateTime?   @map("served_at")
+  createdAt           DateTime    @default(now()) @map("created_at")
+  updatedAt           DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  student      Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  messFacility MessFacility  @relation(fields: [messFacilityId], references: [id], onDelete: Cascade)
+  orderItems   OrderItem[]
+  orderQRCodes OrderQRCode[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id                  String  @id @default(uuid())
+  orderId             String  @map("order_id")
+  menuItemId          String  @map("menu_item_id")
+  quantity            Int     @default(1)
+  unitPrice           Decimal @map("unit_price") @db.Decimal(10, 2)
+  totalPrice          Decimal @map("total_price") @db.Decimal(10, 2)
+  specialInstructions String? @map("special_instructions")
+
+  // Relations
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  @@map("order_items")
+}
+
+model OrderQRCode {
+  id         String    @id @default(uuid())
+  orderId    String    @map("order_id")
+  qrCodeData String    @unique @map("qr_code_data")
+  used       Boolean   @default(false)
+  usedAt     DateTime? @map("used_at")
+  expiresAt  DateTime  @map("expires_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_qr_codes")
+}
+
+model CsvUpload {
+  id             String   @id @default(uuid())
+  uploadType     String   @map("upload_type")
+  filename       String
+  uploadedBy     String   @map("uploaded_by")
+  totalRows      Int      @default(0) @map("total_rows")
+  successfulRows Int      @default(0) @map("successful_rows")
+  failedRows     Int      @default(0) @map("failed_rows")
+  errorLog       Json?    @map("error_log")
+  status         String   @default("PROCESSING")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Relations
+  uploader User @relation(fields: [uploadedBy], references: [id])
+
+  @@map("csv_uploads")
+}
+
+// =====================================
+// System Configuration Tables
+// =====================================
+
+model SystemConfig {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  category  String   @default("general")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_config")
+}
+
+model Unit {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  symbol    String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  items Item[]
+
+  @@map("units")
+}
+
+model StorageType {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  items Item[]
+
+  @@map("storage_types")
+}
+
+model VendorCategory {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  vendors Vendor[]
+
+  @@map("vendor_categories")
+}
+
+model Category {
+  id    String @id @default(uuid())
+  name  String @unique
+  items Item[]
+
+  @@map("categories")
+}
+
+model Item {
+  id              String   @id @default(uuid())
+  name            String
+  sku             String   @unique
+  unitId          String   @map("unit_id")
+  imageUrl        String?  @map("image_url")
+  categoryId      String   @map("category_id")
+  barcode         String?
+  moq             Int      @default(0)
+  reorderPoint    Int      @default(0) @map("reorder_point")
+  vendorId        String?  @map("vendor_id")
+  storageTypeId   String?  @map("storage_type_id")
+  perishable      Boolean  @default(false)
+  costPerUnit     Decimal  @default(0) @map("cost_per_unit") @db.Decimal(10, 2)
+  pointsValue     Int      @default(0) @map("points_value")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  category     Category      @relation(fields: [categoryId], references: [id])
+  unit         Unit          @relation(fields: [unitId], references: [id])
+  vendor       Vendor?       @relation(fields: [vendorId], references: [id])
+  storageType  StorageType?  @relation(fields: [storageTypeId], references: [id])
+  batches      ItemBatch[]
+  stockLedger  StockLedger[]
+  poItems      POItem[]
+  grnItems     GRNItem[]
+  indentItems  IndentItem[]
+  issueItems   IssueItem[]
+  recipes      Recipe[]
+  alerts       Alert[]
+
+  @@map("items")
+}
+
+model ItemBatch {
+  id        String    @id @default(uuid())
+  itemId    String    @map("item_id")
+  batchNo   String    @map("batch_no")
+  qtyOnHand Float     @map("qty_on_hand")
+  unitCost  Float     @map("unit_cost")
+  mfgDate   DateTime? @map("mfg_date")
+  expDate   DateTime? @map("exp_date")
+  location  String?
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  item        Item          @relation(fields: [itemId], references: [id])
+  stockLedger StockLedger[]
+  issueItems  IssueItem[]
+
+  @@unique([itemId, batchNo])
+  @@map("item_batches")
+}
+
+model StockLedger {
+  id        String          @id @default(uuid())
+  itemId    String          @map("item_id")
+  batchId   String?         @map("batch_id")
+  txnType   TransactionType @map("txn_type")
+  qty       Float
+  refType   ReferenceType   @map("ref_type")
+  refId     String          @map("ref_id")
+  createdBy String          @map("created_by")
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  // Relations
+  item  Item       @relation(fields: [itemId], references: [id])
+  batch ItemBatch? @relation(fields: [batchId], references: [id])
+  user  User       @relation(fields: [createdBy], references: [id])
+
+  @@index([itemId, createdAt])
+  @@map("stock_ledger")
+}
+
+model Vendor {
+  id         String          @id @default(uuid())
+  name       String
+  categoryId String          @map("category_id")
+  gstNo      String          @map("gst_no")
+  phone      String
+  email      String
+  address    String
+  createdAt  DateTime        @default(now()) @map("created_at")
+
+  // Relations
+  category       VendorCategory  @relation(fields: [categoryId], references: [id])
+  items          Item[]
+  purchaseOrders PurchaseOrder[]
+
+  @@map("vendors")
+}
+model PurchaseOrder {
+  id        String   @id @default(uuid())
+  vendorId  String   @map("vendor_id")
+  poNo      String   @unique @map("po_no")
+  status    POStatus @default(OPEN)
+  subtotal  Decimal  @default(0) @db.Decimal(12,2) @map("subtotal")
+  tax       Decimal  @default(0) @db.Decimal(10,2) @map("tax")
+  total     Decimal  @default(0) @db.Decimal(12,2) @map("total")
+  notes     String?
+  approved  Boolean  @default(false)
+  locked    Boolean  @default(false)
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  vendor  Vendor   @relation(fields: [vendorId], references: [id])
+  creator User     @relation(fields: [createdBy], references: [id])
+  items   POItem[]
+  grns    GRN[]
+  
+  @@map("purchase_orders")
+}
+
+model POItem {
+  id          String  @id @default(uuid())
+  poId        String  @map("po_id")
+  itemId      String  @map("item_id")
+  orderedQty  Decimal @db.Decimal(10,3) @map("ordered_qty")
+  receivedQty Float   @default(0) @map("received_qty")
+  unitCost    Decimal @db.Decimal(10,2) @map("unit_cost")
+  taxRate     Decimal @default(18) @db.Decimal(5,2) @map("tax_rate")
+  pointsUsed  Int     @default(0) @map("points_used")
+  
+  // Relations
+  po       PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  item     Item          @relation(fields: [itemId], references: [id])
+  grnItems GRNItem[]
+  
+  @@map("po_items")
+}
+
+
+model GRN {
+  id         String   @id @default(uuid())
+  poId       String   @map("po_id")
+  grnNo      String   @unique @map("grn_no")
+  invoiceNo  String?  @map("invoice_no")
+  receivedAt DateTime @default(now()) @map("received_at")
+  receivedBy String   @map("received_by")
+  notes      String?
+
+  // Relations
+  po       PurchaseOrder @relation(fields: [poId], references: [id])
+  receiver User          @relation(fields: [receivedBy], references: [id])
+  items    GRNItem[]
+
+  @@map("grns")
+}
+
+model GRNItem {
+  id          String    @id @default(uuid())
+  grnId       String    @map("grn_id")
+  poItemId    String    @map("po_item_id")
+  itemId      String    @map("item_id")
+  batchNo     String    @map("batch_no")
+  mfgDate     DateTime? @map("mfg_date")
+  expDate     DateTime? @map("exp_date")
+  receivedQty Float     @map("received_qty")
+  unitCost    Float     @map("unit_cost")
+
+  // Relations
+  grn    GRN    @relation(fields: [grnId], references: [id], onDelete: Cascade)
+  poItem POItem @relation(fields: [poItemId], references: [id])
+  item   Item   @relation(fields: [itemId], references: [id])
+
+  @@map("grn_items")
+}
+
+model Indent {
+  id               String       @id @default(uuid())
+  requestedBy      String       @map("requested_by")
+  requestedForDate DateTime     @map("requested_for_date")
+  meal             MealType
+  status           IndentStatus @default(PENDING)
+  notes            String?
+  autoGenerated    Boolean      @default(false) @map("auto_generated")
+  totalCost        String       @default("0") @map("total_cost")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  requester User         @relation(fields: [requestedBy], references: [id])
+  items     IndentItem[]
+  issues    Issue[]
+
+  @@map("indents")
+}
+
+model IndentItem {
+  id           String @id @default(uuid())
+  indentId     String @map("indent_id")
+  itemId       String @map("item_id")
+  requestedQty String @map("requested_qty")
+  approvedQty  String @default("0") @map("approved_qty")
+  issuedQty    Float  @default(0) @map("issued_qty")
+  estimatedCost String @default("0") @map("estimated_cost")
+
+  // Relations
+  indent Indent @relation(fields: [indentId], references: [id], onDelete: Cascade)
+  item   Item   @relation(fields: [itemId], references: [id])
+
+  @@map("indent_items")
+}
+
+model Issue {
+  id       String   @id @default(uuid())
+  indentId String   @map("indent_id")
+  issuedBy String   @map("issued_by")
+  issuedAt DateTime @default(now()) @map("issued_at")
+  comments String?
+
+  // Relations
+  indent Indent      @relation(fields: [indentId], references: [id])
+  issuer User        @relation(fields: [issuedBy], references: [id])
+  items  IssueItem[]
+
+  @@map("issues")
+}
+
+model IssueItem {
+  id      String @id @default(uuid())
+  issueId String @map("issue_id")
+  itemId  String @map("item_id")
+  batchId String @map("batch_id")
+  qty     Float
+
+  // Relations
+  issue Issue     @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  item  Item      @relation(fields: [itemId], references: [id])
+  batch ItemBatch @relation(fields: [batchId], references: [id])
+
+  @@map("issue_items")
+}
+
+model Dish {
+  id        String   @id @default(uuid())
+  name      String
+  imageUrl  String?  @map("image_url")
+  category  String?
+  costPer5Students String @default("0") @map("cost_per_5_students")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  recipes       Recipe[]
+  mealPlanDishes MealPlanDish[]
+
+  @@map("dishes")
+}
+
+model Recipe {
+  id            String @id @default(uuid())
+  dishId        String @map("dish_id")
+  itemId        String @map("item_id")
+  qtyPer5Students String @map("qty_per_5_students")
+
+  // Relations
+  dish Dish @relation(fields: [dishId], references: [id], onDelete: Cascade)
+  item Item @relation(fields: [itemId], references: [id])
+
+  @@unique([dishId, itemId])
+  @@map("recipes")
+}
+
+model Alert {
+  id        String      @id @default(uuid())
+  itemId    String      @map("item_id")
+  type      AlertType
+  message   String
+  status    AlertStatus @default(OPEN)
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  // Relations
+  item Item @relation(fields: [itemId], references: [id])
+
+  @@map("alerts")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  action    String
+  entity    String
+  entityId  String   @map("entity_id")
+  metaJson  Json?    @map("meta_json")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+// Enums
+enum UserRole {
+  ADMIN
+  CHEF
+  STORE
+  COOK
+  VIEWER
+  FNB_MANAGER
+  SCANNER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum UserType {
+  STUDENT
+  EMPLOYEE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  SUSPENDED
+  CANCELLED
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum TransactionType {
+  RECEIPT
+  ISSUE
+  ADJUST
+}
+
+enum ReferenceType {
+  PO
+  GRN
+  ISSUE
+  RETURN
+  VARIANCE
+}
+
+enum POStatus {
+  OPEN
+  PARTIAL
+  CLOSED
+  CANCELLED
+}
+
+enum IndentStatus {
+  PENDING
+  APPROVED
+  PARTIAL
+  REJECTED
+  SENT
+  COMPLETED  
+}
+
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  SNACKS
+  DINNER
+}
+
+enum AlertType {
+  MOQ
+  EXPIRY
+  LOW_STOCK
+}
+
+enum AlertStatus {
+  OPEN
+  DISMISSED
+  CONVERTED
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARED
+  SERVED
+  CANCELLED
+}

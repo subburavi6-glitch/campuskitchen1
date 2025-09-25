@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom theme colors */
+:root {
+  --primary-color: #223F7F;
+  --primary-light: #3b82f6;
+  --primary-dark: #1e40af;
+  --secondary-color: #FFFFFF;
+  --accent-color: #F59E0B;
+}
+
+/* React Select Styles */
+.react-select-container .react-select__control {
+  @apply border-gray-300 rounded-lg;
+}
+
+.react-select-container .react-select__control:hover {
+  @apply border-gray-400;
+}
+
+.react-select-container .react-select__control--is-focused {
+  @apply border-blue-500 ring-2 ring-blue-500 ring-opacity-20;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.react-select-container .react-select__menu {
+  @apply border border-gray-300 rounded-lg shadow-lg;
+}
+
+.react-select-container .react-select__option {
+  @apply text-gray-900;
+}
+
+.react-select-container .react-select__option--is-focused {
+  @apply bg-blue-50 text-blue-900;
+}
+
+.react-select-container .react-select__option--is-selected {
+  @apply bg-blue-600 text-white;
+}
